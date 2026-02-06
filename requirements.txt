@@ -1,0 +1,2 @@
+# For Contact Manager PDF export
+reportlab>=4.0.0
