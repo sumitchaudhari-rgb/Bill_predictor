@@ -6,9 +6,7 @@ from sklearn.linear_model import LinearRegression
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 import pandas as pd
-import google.generativeai as genai
-
-genai.configure(api_key="AIzaSyCZ1NxthbMqEh_yDu2I8EwIcvxBRdMFdk8")
+from huggingface_hub import InferenceClient
 
 
 class EnergyBillPredictor:
@@ -17,6 +15,13 @@ class EnergyBillPredictor:
         self.root.title("Energy Bill Predictor")
         self.root.geometry("1024x700")
         self.root.configure(bg="black")
+
+        # Initialize Hugging Face client (no API key needed for public models)
+        try:
+            self.hf_client = InferenceClient()
+        except Exception as e:
+            print(f"Could not initialize Hugging Face client: {e}")
+            self.hf_client = None
 
         # Initialize themes
         self.LIGHT_THEME = {
@@ -50,8 +55,6 @@ class EnergyBillPredictor:
 
         # Start with splash screen
         self.initialize_main_content()
-
-    
 
     def create_scrollable_frame(self, parent):
         container = ttk.Frame(parent)
@@ -521,7 +524,6 @@ class EnergyBillPredictor:
                  font=("Arial", 18, "bold"),
                  fg="#2E86C1").pack(pady=10)
 
-
     def create_chatbot_page(self):
         frame, scrollable_frame = self.frames['chatbot']
         self.create_navigation_bar(frame)
@@ -531,44 +533,124 @@ class EnergyBillPredictor:
         container.pack(pady=50, anchor="center")
 
         ttk.Label(container,
-                text="Chat with Energy Assistant",
+                text="Chat with Energy Assistant (Powered by Llama 2)",
                 font=("Helvetica", 24, "bold")).pack(pady=20)
 
-        chatbot_text = tk.Text(container, height=25, width=170, font=("Arial", 12),bg="#F5F5F5")
+        chatbot_text = tk.Text(container, height=25, width=170, font=("Arial", 12), bg="#F5F5F5")
         chatbot_text.pack(pady=10)
 
         question_frame = ttk.Frame(container)
         question_frame.pack(pady=10, fill="x")
 
         question_var = tk.StringVar()
-        question_entry = tk.Entry(question_frame, textvariable=question_var, font=("Arial", 12), width=170,bg="lightgray",highlightcolor="blue")
-        question_entry.pack(side="left", padx=5,ipady=15)
+        question_entry = tk.Entry(question_frame, textvariable=question_var, font=("Arial", 12), width=170, bg="lightgray", highlightcolor="blue")
+        question_entry.pack(side="left", padx=5, ipady=15)
 
-        # Function to handle chatbot reply
+        # Function to handle chatbot reply with Llama 2
         def chatbot_reply():
-            question = question_var.get().lower()
-            answers = {
-                "how to save energy?": "Turn off unused appliances, use LED bulbs, and limit AC usage.",
-                "why is my bill high?": "Check for high-consumption appliances and reduce their usage.",
-                "what appliances use the most energy?": "Air conditioners, refrigerators, and water heaters typically consume the most energy.",
-                "tips for reducing energy bill?": "Set thermostat higher in summer, lower in winter. Use energy-efficient appliances. Turn off lights when not in use.",
-                "how does time of day affect energy costs?": "Many utilities charge more during peak hours (typically afternoon/evening). Using appliances during off-peak hours can save money."
+            question = question_var.get().strip()
+            if not question:
+                return
+                
+            chatbot_text.insert(tk.END, "You: ", "user_tag")
+            chatbot_text.insert(tk.END, f"{question}\n", "user_text")
+
+            # Enhanced predefined answers for common energy questions
+            predefined_answers = {
+                "how to save energy": "Here are effective ways to save energy:\n• Switch to LED bulbs (use 75% less energy)\n• Set AC to 24-26°C (each degree lower increases consumption by 6-8%)\n• Unplug devices when not in use\n• Use natural light during the day\n• Regular maintenance of appliances",
+                "why is my bill high": "High electricity bills can be caused by:\n• Air conditioner overuse (biggest energy consumer)\n• Old, inefficient appliances\n• Devices left on standby mode\n• Poor insulation\n• Peak hour usage (4-9 PM costs more)\nCheck your highest consumption appliances first.",
+                                "what appliances use most energy": "Top energy-consuming appliances:\n1. Air Conditioner (1500-2000W)\n2. Water Heater (1500-4000W)\n3. Refrigerator (150-400W continuous)\n4. Washing Machine (500-2000W)\n5. Microwave (700-1300W)\n6. TV (100-400W)\n7. Fan (75W)",
+                "tips for reducing energy bill": "Money-saving energy tips:\n• Use appliances during off-peak hours (before 4 PM, after 9 PM)\n• Buy 5-star rated appliances\n• Use ceiling fans with AC (allows higher thermostat setting)\n• Seal air leaks around doors/windows\n• Use cold water for washing clothes\n• Clean AC filters monthly",
+                "time of day energy costs": "Energy pricing by time:\n• Peak hours (4-9 PM): Highest rates\n• Off-peak hours (10 PM-6 AM): Lowest rates\n• Standard hours: Medium rates\nRun heavy appliances like washing machines, dishwashers during off-peak hours to save 20-30%.",
+                "led vs normal bulb": "LED vs Incandescent comparison:\n• Energy use: LED uses 75% less energy\n• Lifespan: LED lasts 25x longer (25,000 vs 1,000 hours)\n• Heat: LED produces 80% less heat\n• Cost: Higher upfront, but saves ₹1000+ per year\n• Environmental: LED reduces carbon footprint significantly",
+                "ac temperature": "Optimal AC temperature settings:\n• Set to 24-26°C for best efficiency\n• Each degree below 24°C increases energy use by 6-8%\n• Use ceiling fans to feel 2-3°C cooler\n• Close doors/windows when AC is on\n• Use timer function to avoid overnight cooling",
+                "energy efficient appliances": "Choosing energy-efficient appliances:\n• Look for 5-star BEE rating (saves 30-50% energy)\n• Inverter technology for AC/refrigerator\n• Front-loading washing machines use less water/energy\n• Induction cooktops are 85% efficient vs 40% for gas\n• ENERGY STAR certified products",
+                "hello": "Hello! I'm your AI-powered energy assistant using Llama 2. I can help you:\n• Reduce electricity bills\n• Choose efficient appliances\n• Understand energy consumption\n• Get personalized saving tips\nWhat would you like to know?",
+                "hi": "Hi there! I'm here to help you save energy and reduce costs. Ask me anything about:\n• Appliance efficiency\n• Bill reduction strategies\n• Energy-saving tips\n• Smart usage patterns",
+                "help": "I can assist you with:\n🔌 Energy saving strategies\n💡 Appliance efficiency tips\n💰 Bill reduction methods\n📊 Usage optimization\n🌱 Eco-friendly practices\n⚡ Smart energy management\n\nJust ask me anything related to energy!"
             }
-            chatbot_text.insert(tk.END,"You: ","user_tag")
-            chatbot_text.insert(tk.END, f"{question}\n","user_text")
 
-            if question in answers:
-                response = answers[question]
-            else:
-                model = genai.GenerativeModel("models/gemini-1.5-flash")
-                response = model.generate_content(question).text or "I couldn't find an answer. Try rephrasing your question."
+            # Check for predefined answers first
+            question_lower = question.lower()
+            response = None
+            
+            for key, answer in predefined_answers.items():
+                if key in question_lower:
+                    response = answer
+                    break
 
+            # If no predefined answer, use Llama 2
+            if not response:
+                try:
+                    if self.hf_client:
+                        # Enhanced prompt for Llama 2 with better context
+                        system_prompt = """You are an expert energy efficiency consultant. Provide helpful, accurate, and practical advice about electricity usage, energy saving, and appliance efficiency. Keep responses concise but informative. Focus on actionable tips that can reduce energy bills.
 
-            chatbot_text.insert(tk.END, f"Bot: {response}\n\n","bot_tag")
+User question: """
+                        
+                        full_prompt = system_prompt + question
+                        
+                        # Use Llama 2 model - try different variants
+                        llama_models = [
+                            "meta-llama/Llama-2-7b-chat-hf",
+                            "meta-llama/Llama-2-13b-chat-hf",
+                            "NousResearch/Llama-2-7b-chat-hf",
+                            "huggingface/CodeLlama-7b-Instruct-hf"
+                        ]
+                        
+                        response = None
+                        for model in llama_models:
+                            try:
+                                response = self.hf_client.text_generation(
+                                    full_prompt,
+                                    model=model,
+                                    max_new_tokens=150,
+                                    temperature=0.7,
+                                    do_sample=True,
+                                    top_p=0.9,
+                                    repetition_penalty=1.1
+                                )
+                                
+                                # Clean up the response
+                                if isinstance(response, str):
+                                    response = response.strip()
+                                    # Remove the prompt from response if it's included
+                                    if system_prompt in response:
+                                        response = response.replace(system_prompt, "").strip()
+                                    if question in response:
+                                        response = response.replace(question, "").strip()
+                                    break
+                                else:
+                                    continue
+                                    
+                            except Exception as model_error:
+                                print(f"Error with model {model}: {model_error}")
+                                continue
+                        
+                        if not response:
+                            response = "I'm having trouble accessing the Llama 2 model right now. Please try asking about specific energy topics like 'AC temperature settings' or 'LED bulb benefits'."
+                            
+                    else:
+                        response = "Llama 2 model is not available. Please try asking about energy saving tips, appliance usage, or bill reduction strategies."
+                        
+                except Exception as e:
+                    print(f"Llama 2 API error: {e}")
+                    response = "I'm currently having technical difficulties with the AI model. Please try asking about:\n• Energy saving tips\n• Appliance efficiency\n• Bill reduction strategies\n• AC temperature settings"
+
+            chatbot_text.insert(tk.END, f"Bot: {response}\n\n", "bot_tag")
             question_var.set("")  # Clear the entry after submitting
-            chatbot_text.tag_config("user_tag",foreground="blue",font=('Helvetica',12,"bold"))
-            chatbot_text.tag_config("user_text", foreground="blue",font=('Helvetica',12,"bold"),)
-            chatbot_text.tag_config("bot_tag",foreground="green",font=('Helvetica',12,"bold"))
+            
+            # Configure text tags for styling
+            chatbot_text.tag_config("user_tag", foreground="blue", font=('Helvetica', 12, "bold"))
+            chatbot_text.tag_config("user_text", foreground="blue", font=('Helvetica', 12, "bold"))
+            chatbot_text.tag_config("bot_tag", foreground="green", font=('Helvetica', 12, "bold"))
+            
+            # Auto-scroll to bottom
+            chatbot_text.see(tk.END)
+
+        # Bind Enter key to send message
+        question_entry.bind('<Return>', lambda event: chatbot_reply())
+
         # Ask Button
         ask_button = tk.Button(
             container,
@@ -584,8 +666,23 @@ class EnergyBillPredictor:
         )
         ask_button.pack(side="left", padx=10)
 
-        # Add instructions
-
+        # Add sample questions for Llama 2
+        sample_frame = ttk.Frame(container)
+        sample_frame.pack(pady=20, fill="x")
+        
+        ttk.Label(sample_frame, 
+                  text="Try asking: 'Best AC temperature for savings?', 'How to reduce my electricity bill?', 'Which appliances consume most energy?'",
+                  font=("Helvetica", 10, "italic"),
+                  foreground="gray").pack()
+        
+        # Add model info
+        info_frame = ttk.Frame(container)
+        info_frame.pack(pady=10, fill="x")
+        
+        ttk.Label(info_frame, 
+                  text="🤖 Powered by Meta's Llama 2 - Advanced AI for better energy advice",
+                  font=("Helvetica", 9, "italic"),
+                  foreground="darkgreen").pack()
         
     def create_report_page(self):
         frame, scrollable_frame = self.frames['report']
@@ -712,7 +809,7 @@ class EnergyBillPredictor:
                     "Refrigerator": 1.5,
                     "TV": 0.80,
                     "Washing Machine": 4,
-                    "led":0.50
+                    "LED":0.50
                 }.get(appliance, 0.65)  # Default cost if appliance not in dict
                 cost = base_cost * hour
                 energy_costs.append(cost)
@@ -749,8 +846,6 @@ class EnergyBillPredictor:
             ax1.set_xlabel('Appliance')
             ax1.set_ylabel('Estimated Cost (₹)')
             ax1.tick_params(axis='x', rotation=45)
-
-
 
             # Add value labels on the bars
             for bar in bars:
@@ -892,11 +987,12 @@ class EnergyBillPredictor:
                 "Air Conditioner": 15,
                 "Refrigerator": 4,
                 "TV": 3,
-                "Washing Machine": 5
+                "Washing Machine": 5,
+                "LED": 1
             }
 
             # Get base cost for the appliance
-            base_cost = base_costs.get(appliance, 5)  # Default 5 if appliance not  # Default 5 if appliance not found
+            base_cost = base_costs.get(appliance, 5)  # Default 5 if appliance not found
 
             # Calculate current daily cost
             current_cost = base_cost * usage_hours
@@ -945,13 +1041,8 @@ class EnergyBillPredictor:
             colors = [assign_color(h) for h in hours]
 
             # Create bar chart
-            # First subplot with smaller font sizes
             plt.subplot(1, 2, 1)
             bars = plt.bar(apps, hours, color=colors)
-            plt.title("Energy Consumption", fontsize=10)
-            plt.ylabel("Hours/Day", fontsize=8)
-            plt.xlabel("Appliance", fontsize=8)
-            plt.xticks(rotation=45, fontsize=8)
             plt.title("Energy Consumption by Appliance", fontsize=12)
             plt.ylabel("Hours/Day")
             plt.xlabel("Appliance")
@@ -1057,8 +1148,6 @@ class EnergyBillPredictor:
                   text=instructions,
                   font=("Helvetica", 12),
                   justify="left").pack(pady=20, padx=20)
-
-
 
     def run(self):
         self.root.mainloop()
